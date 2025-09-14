@@ -1,7 +1,8 @@
+import React from "react";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { FolderOpen, FileText, Brain, Calendar, MoreHorizontal } from "lucide-react";
+import { FolderOpen, FileText, Brain, Calendar, MoreHorizontal, BookOpen, Calculator, History, GraduationCap } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 
 interface Topic {
@@ -13,6 +14,7 @@ interface Topic {
   processedNotesCount: number;
   lastUpdated: string;
   totalNotes: number;
+  created_at: string;
 }
 
 interface TopicCardProps {
@@ -25,23 +27,15 @@ export function TopicCard({ topic, onView, onUploadToTopic }: TopicCardProps) {
   const getSubjectIcon = (subject: string) => {
     switch (subject.toLowerCase()) {
       case 'biology':
-        return '🧬';
-      case 'chemistry':
-        return '⚗️';
-      case 'physics':
-        return '⚛️';
+        return BookOpen;
       case 'mathematics':
-        return '📐';
+        return Calculator;
       case 'history':
-        return '📜';
-      case 'english':
-        return '📚';
-      case 'psychology':
-        return '🧠';
+        return History;
       case 'computer science':
-        return '💻';
+        return BookOpen;
       default:
-        return '📖';
+        return BookOpen;
     }
   };
 
@@ -51,10 +45,10 @@ export function TopicCard({ topic, onView, onUploadToTopic }: TopicCardProps) {
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-3">
             <div 
-              className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl"
+              className="w-12 h-12 rounded-lg flex items-center justify-center"
               style={{ backgroundColor: `${topic.color}20`, border: `2px solid ${topic.color}` }}
             >
-              {getSubjectIcon(topic.subject)}
+              {React.createElement(getSubjectIcon(topic.subject), { className: "h-6 w-6", style: { color: topic.color } })}
             </div>
             <div className="space-y-1">
               <h3 className="font-semibold text-foreground">{topic.name}</h3>
@@ -93,8 +87,8 @@ export function TopicCard({ topic, onView, onUploadToTopic }: TopicCardProps) {
         <div className="space-y-2">
           <div className="flex items-center justify-between p-3 bg-background rounded-lg border border-border">
             <div className="flex items-center space-x-2">
-              <FolderOpen className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">Original Notes</span>
+              <GraduationCap className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">Classes</span>
             </div>
             <Badge variant="secondary" className="text-xs">
               {topic.originalNotesCount}
@@ -103,11 +97,11 @@ export function TopicCard({ topic, onView, onUploadToTopic }: TopicCardProps) {
           
           <div className="flex items-center justify-between p-3 bg-background rounded-lg border border-border">
             <div className="flex items-center space-x-2">
-              <Brain className="h-4 w-4 text-accent" />
-              <span className="text-sm font-medium text-foreground">AI Processed</span>
+              <FileText className="h-4 w-4 text-accent" />
+              <span className="text-sm font-medium text-foreground">Total Notes</span>
             </div>
             <Badge variant="secondary" className="text-xs">
-              {topic.processedNotesCount}
+              {topic.totalNotes}
             </Badge>
           </div>
         </div>

@@ -1,61 +1,221 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { Separator } from "./ui/separator";
-import { ArrowLeft, FileText, Brain, HelpCircle, Download, Sparkles } from "lucide-react";
-
-interface Note {
-  id: string;
-  title: string;
-  date: string;
-  subject: string;
-  status: 'summarized' | 'pending' | 'processed';
-  tags: string[];
-  preview: string;
-  content?: string;
-  summary?: string;
-  keyPoints?: string[];
-  questions?: Array<{
-    question: string;
-    options?: string[];
-    answer: string;
-    type: 'multiple-choice' | 'short-answer';
-  }>;
-}
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { ArrowLeft, FileText, Brain, Download, ExternalLink, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import { type Note, type Class, type Topic } from "../services/api";
 
 interface NoteViewerProps {
   note: Note;
   onBack: () => void;
-  onQuizMode: (note: Note) => void;
+  className?: string;
+  topicName?: string;
 }
 
-export function NoteViewer({ note, onBack, onQuizMode }: NoteViewerProps) {
-  const [processingState, setProcessingState] = useState<'idle' | 'summarizing' | 'generating-questions'>('idle');
+export function NoteViewer({ note, onBack, className, topicName }: NoteViewerProps) {
+  const [pdfZoom, setPdfZoom] = useState(100);
+  const [imageZoom, setImageZoom] = useState(100);
+  const [leftWidth, setLeftWidth] = useState(50); // percentage
+  const [isDragging, setIsDragging] = useState(false);
 
-  const handleSummarize = () => {
-    setProcessingState('summarizing');
-    // Mock AI processing
-    setTimeout(() => {
-      setProcessingState('idle');
-      alert('Note summarized! (This would update the note with AI-generated summary)');
-    }, 2000);
+  const getFileExtension = (filename: string) => {
+    return filename.split('.').pop()?.toLowerCase() || '';
   };
 
-  const handleGenerateQuestions = () => {
-    setProcessingState('generating-questions');
-    // Mock AI processing
-    setTimeout(() => {
-      setProcessingState('idle');
-      alert('Questions generated! (This would create quiz questions from the note)');
-    }, 2000);
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getSummaryText = (summary: string | string[]) => {
+    if (Array.isArray(summary)) {
+      return summary.join('\n\n');
+    }
+    try {
+      const parsed = JSON.parse(summary);
+      if (Array.isArray(parsed)) {
+        return parsed.join('\n\n');
+      }
+      return summary;
+    } catch {
+      return summary || 'No summary available';
+    }
+  };
+
+  const renderRawFile = () => {
+    const extension = getFileExtension(note.title);
+    const rawPath = note.raw_path || note.notes_path;
+    
+    if (extension === 'pdf') {
+      return (
+        <div className="h-full">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPdfZoom(Math.max(50, pdfZoom - 25))}
+                disabled={pdfZoom <= 50}
+              >
+                <ZoomOut className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground">{pdfZoom}%</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPdfZoom(Math.min(200, pdfZoom + 25))}
+                disabled={pdfZoom >= 200}
+              >
+                <ZoomIn className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="h-[calc(100%-40px)] overflow-auto border rounded-lg">
+            <div style={{ 
+              transform: `scale(${pdfZoom / 100})`,
+              transformOrigin: 'top left',
+              width: `${100 / (pdfZoom / 100)}%`,
+              height: `${100 / (pdfZoom / 100)}%`
+            }}>
+              <iframe
+                src={`http://localhost:5002/${rawPath}#toolbar=0`}
+                className="w-full border-0"
+                title={`PDF: ${note.title}`}
+                style={{ 
+                  minHeight: '800px',
+                  height: '800px'
+                }}
+                onError={(e) => {
+                  console.error('PDF iframe failed to load:', e);
+                  console.log('Attempted URL:', `http://localhost:5002/${rawPath}`);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    } else if (['png', 'jpg', 'jpeg'].includes(extension)) {
+      return (
+        <div className="h-full">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setImageZoom(Math.max(25, imageZoom - 25))}
+                disabled={imageZoom <= 25}
+              >
+                <ZoomOut className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground">{imageZoom}%</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setImageZoom(Math.min(300, imageZoom + 25))}
+                disabled={imageZoom >= 300}
+              >
+                <ZoomIn className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="h-[calc(100%-40px)] overflow-auto bg-gray-50 rounded-lg">
+            <div 
+              className="p-4"
+              style={{ 
+                transform: `scale(${imageZoom / 100})`,
+                transformOrigin: 'top left',
+                width: `${100 / (imageZoom / 100)}%`,
+                height: `${100 / (imageZoom / 100)}%`
+              }}
+            >
+              <img
+                src={`http://localhost:5002/${rawPath}`}
+                alt={note.title}
+                className="rounded-lg shadow-lg w-full h-auto"
+                style={{ display: 'block' }}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    } else {
+      return (
+        <div className="h-full flex items-center justify-center bg-gray-50 rounded-lg">
+          <div className="text-center">
+            <FileText className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+            <p className="text-gray-600">File type not supported for preview</p>
+            <Button 
+              variant="outline" 
+              className="mt-4"
+              onClick={() => window.open(`http://localhost:5002/${rawPath}`, '_blank')}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Open File
+            </Button>
+          </div>
+        </div>
+      );
+    }
   };
 
   const handleExport = () => {
     alert('Export functionality would be implemented here');
   };
 
-  // Mock content for display
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    e.preventDefault();
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+    
+    const container = document.querySelector('.split-container') as HTMLElement;
+    if (!container) return;
+    
+    const rect = container.getBoundingClientRect();
+    const newLeftWidth = ((e.clientX - rect.left) / rect.width) * 100;
+    
+    // Constrain between 20% and 80%
+    const constrainedWidth = Math.min(80, Math.max(20, newLeftWidth));
+    setLeftWidth(constrainedWidth);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Add event listeners for mouse move and up
+  React.useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isDragging]);
+
   const mockOriginalContent = `
 # ${note.title}
 
@@ -100,26 +260,6 @@ Meiosis is a specialized form of cell division that produces four genetically di
 • Biological significance of each process
   `;
 
-  const mockKeyPoints = note.keyPoints || [
-    "Mitosis maintains chromosome number (diploid → diploid)",
-    "Meiosis reduces chromosome number (diploid → haploid)", 
-    "Crossing over occurs only during meiosis",
-    "Both processes are essential for life cycles"
-  ];
-
-  const mockQuestions = note.questions || [
-    {
-      question: "What is the main purpose of mitosis?",
-      options: ["Sexual reproduction", "Growth and repair", "Genetic diversity", "Chromosome reduction"],
-      answer: "Growth and repair",
-      type: "multiple-choice" as const
-    },
-    {
-      question: "During which phase of mitosis do chromosomes align at the cell's equator?",
-      answer: "Metaphase",
-      type: "short-answer" as const
-    }
-  ];
 
   return (
     <div className="min-h-screen bg-background">
@@ -129,14 +269,16 @@ Meiosis is a specialized form of cell division that produces four genetically di
           <div className="flex items-center space-x-4">
             <Button variant="ghost" size="sm" onClick={onBack}>
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Notes
+              {className === 'search' ? 'Back to Search Results' : `Back to ${className || 'Class'}`}
             </Button>
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">{note.title}</h1>
-              <div className="flex items-center space-x-2 mt-1">
-                <Badge variant="outline">{note.subject}</Badge>
-                <span className="text-sm text-muted-foreground">{note.date}</span>
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
+                <Brain className="h-5 w-5 text-accent" />
+                <h1 className="text-xl font-semibold text-foreground">{note.title}</h1>
               </div>
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                {formatDate(note.created_at)}
+              </Badge>
             </div>
           </div>
           
@@ -144,144 +286,94 @@ Meiosis is a specialized form of cell division that produces four genetically di
             <Button 
               variant="outline" 
               size="sm"
-              onClick={handleSummarize}
-              disabled={processingState === 'summarizing'}
+              onClick={() => window.open(`http://localhost:5002/${note.raw_path}`, '_blank')}
             >
-              {processingState === 'summarizing' ? (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2 animate-spin" />
-                  Summarizing...
-                </>
-              ) : (
-                <>
-                  <Brain className="h-4 w-4 mr-2" />
-                  Summarize
-                </>
-              )}
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleGenerateQuestions}
-              disabled={processingState === 'generating-questions'}
-            >
-              {processingState === 'generating-questions' ? (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <HelpCircle className="h-4 w-4 mr-2" />
-                  Generate Questions
-                </>
-              )}
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" />
-              Export
+              Download Original
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Two-panel layout */}
-      <div className="flex h-[calc(100vh-80px)]">
-        {/* Left Panel - Original Note */}
-        <div className="flex-1 p-6 overflow-auto border-r border-border">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="h-5 w-5 mr-2" />
-                Original Note
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="prose prose-sm max-w-none text-foreground">
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                  {mockOriginalContent.trim()}
-                </pre>
+      {/* Split View Content */}
+      <div className="flex h-[calc(100vh-80px)] split-container">
+        {/* Left Side - Raw File */}
+        <div 
+          className="border-r border-border"
+          style={{ width: `${leftWidth}%` }}
+        >
+          <div className="h-full p-6">
+            <div className="h-full">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold flex items-center">
+                  <FileText className="h-5 w-5 mr-2 text-muted-foreground" />
+                  Original File
+                </h2>
+                <Badge variant="outline" className="text-xs">
+                  {getFileExtension(note.title).toUpperCase()}
+                </Badge>
               </div>
-            </CardContent>
-          </Card>
+              <div className="h-[calc(100%-60px)]">
+                {renderRawFile()}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Right Panel - AI Processed */}
-        <div className="flex-1 p-6 overflow-auto">
-          <div className="space-y-6">
-            {/* Summary */}
-            <Card>
+        {/* Resizable Divider */}
+        <div 
+          className="w-1 bg-border hover:bg-accent cursor-col-resize flex items-center justify-center group"
+          onMouseDown={handleMouseDown}
+        >
+          <div className="w-0.5 h-8 bg-muted-foreground/30 group-hover:bg-accent transition-colors rounded-full"></div>
+        </div>
+
+        {/* Right Side - AI Generated Markdown */}
+        <div 
+          className="flex-1"
+          style={{ width: `${100 - leftWidth}%` }}
+        >
+          <div className="h-full p-6 overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center">
+                <Brain className="h-5 w-5 mr-2 text-accent" />
+                AI Processed Notes
+              </h2>
+              <Badge variant="outline" className="text-xs bg-green-100 text-green-800">
+                Processed
+              </Badge>
+            </div>
+            
+            {/* AI Summary */}
+            <Card className="mb-6">
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Brain className="h-5 w-5 mr-2" />
-                  AI Summary
-                </CardTitle>
+                <CardTitle className="text-base">Summary</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="prose prose-sm max-w-none text-foreground">
-                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                    {mockSummary.trim()}
-                  </pre>
+                <div className="prose prose-sm max-w-none">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                  >
+                    {getSummaryText(note.summary)}
+                  </ReactMarkdown>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Key Concepts */}
+            {/* Full AI Generated Content */}
             <Card>
               <CardHeader>
-                <CardTitle>Key Concepts</CardTitle>
+                <CardTitle className="text-base">Detailed Notes</CardTitle>
               </CardHeader>
               <CardContent>
-                <ul className="space-y-2">
-                  {mockKeyPoints.map((point, index) => (
-                    <li key={index} className="flex items-start">
-                      <span className="w-2 h-2 bg-accent rounded-full mt-2 mr-3 flex-shrink-0" />
-                      <span className="text-sm text-foreground">{point}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-
-            {/* Suggested Questions */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span className="flex items-center">
-                    <HelpCircle className="h-5 w-5 mr-2" />
-                    Suggested Questions
-                  </span>
-                  <Button 
-                    size="sm" 
-                    onClick={() => onQuizMode(note)}
-                    className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                <div className="prose prose-sm max-w-none">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
                   >
-                    Start Quiz
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {mockQuestions.map((q, index) => (
-                    <div key={index} className="p-3 bg-background rounded-lg border border-border">
-                      <p className="font-medium text-foreground mb-2">
-                        {index + 1}. {q.question}
-                      </p>
-                      {q.type === 'multiple-choice' && q.options && (
-                        <div className="space-y-1">
-                          {q.options.map((option, optIndex) => (
-                            <div key={optIndex} className="text-sm text-muted-foreground ml-4">
-                              {String.fromCharCode(65 + optIndex)}. {option}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div className="mt-2 text-sm">
-                        <span className="font-medium text-accent">Answer: </span>
-                        <span className="text-foreground">{q.answer}</span>
-                      </div>
-                    </div>
-                  ))}
+                    {note.cleaned_text || 'No processed content available'}
+                  </ReactMarkdown>
                 </div>
               </CardContent>
             </Card>

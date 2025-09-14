@@ -1,20 +1,9 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { LoginScreen } from "./components/LoginScreen";
 import { Dashboard } from "./components/Dashboard";
 import { NoteViewer } from "./components/NoteViewer";
 import { TopicViewer } from "./components/TopicViewer";
-
-interface Note {
-  id: string;
-  title: string;
-  date: string;
-  tags: string[];
-  preview: string;
-  content?: string;
-  summary?: string;
-  keyPoints?: string[];
-  status: 'original' | 'processed';
-}
+import { type Topic as ApiTopic, type Note } from "./services/api";
 
 interface Topic {
   id: string;
@@ -25,15 +14,23 @@ interface Topic {
   processedNotesCount: number;
   lastUpdated: string;
   totalNotes: number;
+  created_at: string;
 }
+
+// For components that need the API Topic type
+type TopicForAPI = ApiTopic;
 
 type AppView = 'login' | 'dashboard' | 'note-viewer' | 'topic-viewer';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<AppView>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'dashboard' | 'note-viewer' | 'topic-viewer'>('login');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+  const [previousView, setPreviousView] = useState<'dashboard' | 'topic-viewer'>('dashboard');
+  const [noteSource, setNoteSource] = useState<string>('');
+  const [selectedClass, setSelectedClass] = useState<any>(null);
+  const [searchContext, setSearchContext] = useState<{isSearchActive: boolean, searchTerm: string, searchType: string} | null>(null);
 
   const handleLogin = () => {
     setIsLoggedIn(true);
@@ -52,7 +49,18 @@ export default function App() {
     setSelectedTopic(null);
   };
 
-  const handleViewNote = (note: Note) => {
+  const handleViewNote = (note: Note, className?: string) => {
+    setPreviousView(currentView as 'dashboard' | 'topic-viewer');
+    setNoteSource(className || '');
+    // Store current search context when viewing from search
+    if (className === 'search' && !searchContext) {
+      // This will be updated by Dashboard component with actual search data
+      setSearchContext({isSearchActive: true, searchTerm: '', searchType: 'hybrid'});
+    }
+    // Store class info if coming from topic viewer
+    if (currentView === 'topic-viewer' && className) {
+      setSelectedClass({ name: className });
+    }
     setSelectedNote(note);
     setCurrentView('note-viewer');
   };
@@ -63,9 +71,23 @@ export default function App() {
   };
 
   const handleBackToDashboard = () => {
-    setCurrentView('dashboard');
+    setCurrentView(previousView);
     setSelectedNote(null);
+    if (previousView === 'dashboard') {
+      setSelectedTopic(null);
+      setSelectedClass(null);
+    }
+    setNoteSource('');
+    // Don't clear search context - let it persist when returning from note view
+  };
+
+  const handleBackToTopics = () => {
+    setCurrentView('dashboard');
     setSelectedTopic(null);
+    setSelectedClass(null);
+    setSelectedNote(null);
+    setNoteSource('');
+    setPreviousView('dashboard');
   };
 
   const handleUploadNote = () => {
@@ -88,16 +110,20 @@ export default function App() {
           onLogout={handleLogout}
           onViewNote={handleViewNote}
           onViewTopic={handleViewTopic}
+          searchContext={searchContext}
+          onSearchContextChange={setSearchContext}
         />
       );
 
     case 'topic-viewer':
       return selectedTopic ? (
         <TopicViewer 
-          topic={selectedTopic}
+          topic={selectedTopic} 
           onBack={handleBackToDashboard}
           onViewNote={handleViewNote}
           onUploadNote={handleUploadNote}
+          selectedClass={selectedClass}
+          onBackToTopics={handleBackToTopics}
         />
       ) : (
         <Dashboard 
@@ -112,7 +138,7 @@ export default function App() {
         <NoteViewer 
           note={selectedNote}
           onBack={handleBackToDashboard}
-          onQuizMode={() => {}}
+          className={noteSource}
         />
       ) : (
         <Dashboard 

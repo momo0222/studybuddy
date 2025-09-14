@@ -1,0 +1,8 @@
+anthropic==0.34.0
+sqlite3
+datetime
+json
+typing
+dataclasses
+enum
+random

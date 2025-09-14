@@ -1,5 +1,5 @@
+import React from "react";
 import { Button } from "./ui/button";
-import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 interface LoginScreenProps {
   onLogin: () => void;
@@ -13,10 +13,18 @@ export function LoginScreen({ onLogin, onGuestMode }: LoginScreenProps) {
         {/* Logo */}
         <div className="flex items-center justify-center">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-semibold">SA</span>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden">
+              <img 
+                src="/logo.png" 
+                alt="Study Buddy Logo" 
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  console.error('Logo failed to load, using fallback');
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
             </div>
-            <span className="text-xl font-semibold text-foreground">Study Agent</span>
+            <span className="text-xl font-semibold text-foreground">Study Buddy</span>
           </div>
         </div>
 
@@ -30,13 +38,19 @@ export function LoginScreen({ onLogin, onGuestMode }: LoginScreenProps) {
             Transform your notes into interactive study materials with AI-powered summaries and quizzes
           </p>
 
-          {/* Illustration */}
+          {/* Logo */}
           <div className="flex justify-center py-8">
-            <ImageWithFallback 
-              src="https://images.unsplash.com/photo-1606997875311-857add95bca0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxub3RlYm9vayUyMHRyYW5zZm9ybWluZyUyMGRpZ2l0YWwlMjBmbGFzaGNhcmRzfGVufDF8fHx8MTc1Nzc5NTk5M3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
-              alt="Notebook transforming into digital flashcards"
-              className="w-64 h-48 object-cover rounded-lg shadow-md"
-            />
+            <div className="w-64 h-48 flex items-center justify-center">
+              <img 
+                src="/logo.png" 
+                alt="Studdy Buddy Logo" 
+                className="max-w-full max-h-full object-contain"
+                onError={(e) => {
+                  console.error('Logo failed to load');
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </div>
           </div>
 
           {/* Sign In Buttons */}

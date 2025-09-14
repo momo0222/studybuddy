@@ -1,0 +1,23 @@
+Data Structures and Algorithms - Lecture 1
+
+Big O Notation
+Big O notation is used to describe the upper bound of the time complexity of an algorithm. It describes the worst-case scenario for how the runtime of an algorithm grows as the input size increases.
+
+Common Big O complexities:
+- O(1): Constant time - the algorithm takes the same amount of time regardless of input size
+- O(log n): Logarithmic time - runtime grows logarithmically with input size
+- O(n): Linear time - runtime grows linearly with input size  
+- O(n log n): Linearithmic time - common in efficient sorting algorithms
+- O(n²): Quadratic time - runtime grows quadratically with input size
+- O(2^n): Exponential time - runtime doubles with each additional input
+
+Arrays and Linked Lists
+Arrays store elements in contiguous memory locations, allowing O(1) random access by index. However, insertion and deletion in the middle requires shifting elements, making it O(n).
+
+Linked Lists store elements in nodes that contain data and a pointer to the next node. This allows O(1) insertion and deletion at known positions, but requires O(n) time to access elements by position since you must traverse from the head.
+
+Sorting Algorithms
+Bubble Sort: O(n²) time complexity, repeatedly swaps adjacent elements if they're in wrong order
+Selection Sort: O(n²) time complexity, finds minimum element and places it at beginning
+Merge Sort: O(n log n) time complexity, divides array and merges sorted subarrays
+Quick Sort: O(n log n) average case, O(n²) worst case, uses pivot to partition array

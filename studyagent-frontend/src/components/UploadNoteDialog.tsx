@@ -1,89 +1,170 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Textarea } from "./ui/textarea";
-import { Badge } from "./ui/badge";
-import { Upload, X, Plus, FileText } from "lucide-react";
-
-interface Topic {
-  id: string;
-  name: string;
-  subject: string;
-  color: string;
-}
+import React, { useState, useEffect, useRef } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Upload, FileText, Image, FileIcon, X, CheckCircle, AlertCircle, Plus } from 'lucide-react';
+import { Badge } from './ui/badge';
+import { Alert, AlertDescription } from './ui/alert';
+import { apiService } from '../services/api';
+import type { Topic, Class } from '../services/api';
 
 interface UploadNoteDialogProps {
   topics: Topic[];
-  onUpload: (noteData: {
-    title: string;
-    content: string;
-    topicId: string;
-    newTopicName?: string;
-    newTopicSubject?: string;
-    tags: string[];
-  }) => void;
+  onUpload: (noteData: any) => void;
   trigger: React.ReactNode;
+  preselectedTopicId?: string;
+  preselectedClassId?: string;
+  disableTopicSelection?: boolean;
 }
 
-export function UploadNoteDialog({ topics, onUpload, trigger }: UploadNoteDialogProps) {
+export function UploadNoteDialog({ topics, onUpload, trigger, preselectedTopicId, preselectedClassId, disableTopicSelection }: UploadNoteDialogProps) {
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [selectedTopicId, setSelectedTopicId] = useState<string>('');
-  const [createNewTopic, setCreateNewTopic] = useState(false);
-  const [newTopicName, setNewTopicName] = useState('');
-  const [newTopicSubject, setNewTopicSubject] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [currentTag, setCurrentTag] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedTopicId, setSelectedTopicId] = useState<string>(preselectedTopicId || '');
+  const [selectedClassId, setSelectedClassId] = useState<string>(preselectedClassId || '');
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [localTopics, setLocalTopics] = useState<Topic[]>(topics);
+  const [newClassName, setNewClassName] = useState<string>('');
+  const [newTopicName, setNewTopicName] = useState<string>('');
+  const [showNewClassInput, setShowNewClassInput] = useState(false);
+  const [showNewTopicInput, setShowNewTopicInput] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const subjects = ['Biology', 'Chemistry', 'Physics', 'Mathematics', 'History', 'English', 'Psychology', 'Computer Science'];
+  // Update local topics when props change
+  useEffect(() => {
+    setLocalTopics(topics);
+  }, [topics]);
 
-  const handleSubmit = () => {
-    if (!title.trim() || !content.trim()) return;
+  // Load classes when topic changes
+  useEffect(() => {
+    if (selectedTopicId) {
+      apiService.getClasses(selectedTopicId)
+        .then(setClasses)
+        .catch(console.error);
+    } else {
+      setClasses([]);
+    }
+    setSelectedClassId(preselectedClassId || '');
+  }, [selectedTopicId, preselectedClassId]);
+
+  // Reset form when dialog opens (but preserve file and topic if just created)
+  useEffect(() => {
+    if (open) {
+      if (!selectedTopicId || selectedTopicId !== preselectedTopicId) {
+        setSelectedFile(null);
+        setSelectedTopicId(preselectedTopicId || '');
+        setSelectedClassId(preselectedClassId || '');
+      }
+      setNewClassName('');
+      setNewTopicName('');
+      setShowNewClassInput(false);
+      setShowNewTopicInput(false);
+      setIsUploading(false);
+      setUploadStatus('idle');
+      setErrorMessage('');
+      setSuccessMessage('');
+    }
+  }, [open, preselectedTopicId, preselectedClassId]);
+
+  const handleCreateTopic = async () => {
+    if (!newTopicName.trim()) return;
     
-    if (createNewTopic && (!newTopicName.trim() || !newTopicSubject.trim())) return;
-    if (!createNewTopic && !selectedTopicId) return;
-
-    onUpload({
-      title: title.trim(),
-      content: content.trim(),
-      topicId: createNewTopic ? 'new' : selectedTopicId,
-      newTopicName: createNewTopic ? newTopicName.trim() : undefined,
-      newTopicSubject: createNewTopic ? newTopicSubject.trim() : undefined,
-      tags
-    });
-
-    // Reset form
-    setTitle('');
-    setContent('');
-    setSelectedTopicId('');
-    setCreateNewTopic(false);
-    setNewTopicName('');
-    setNewTopicSubject('');
-    setTags([]);
-    setCurrentTag('');
-    setOpen(false);
-  };
-
-  const handleAddTag = () => {
-    if (currentTag.trim() && !tags.includes(currentTag.trim())) {
-      setTags([...tags, currentTag.trim()]);
-      setCurrentTag('');
+    try {
+      console.log('Creating topic:', newTopicName.trim());
+      const newTopic = await apiService.createTopic(newTopicName.trim());
+      console.log('Topic created:', newTopic);
+      
+      // Add to local topics immediately and select it
+      setLocalTopics(prev => [...prev, newTopic]);
+      setSelectedTopicId(newTopic.id);
+      setNewTopicName('');
+      setShowNewTopicInput(false);
+      
+      // Don't reset the form - keep the file
+      // Trigger refresh of topics list in parent
+      onUpload({ type: 'topic_created', topic: newTopic });
+    } catch (error) {
+      console.error('Topic creation error:', error);
+      setErrorMessage('Failed to create topic: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter(tag => tag !== tagToRemove));
+  const handleCreateClass = async () => {
+    if (!newClassName.trim() || !selectedTopicId) return;
+    
+    try {
+      console.log('Creating class:', newClassName.trim(), 'for topic:', selectedTopicId);
+      const newClass = await apiService.createClass(newClassName.trim(), selectedTopicId);
+      console.log('Class created:', newClass);
+      setClasses(prev => [...prev, newClass]);
+      setSelectedClassId(newClass.id);
+      setNewClassName('');
+      setShowNewClassInput(false);
+    } catch (error) {
+      console.error('Class creation error:', error);
+      setErrorMessage('Failed to create class: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAddTag();
+  const handleUpload = async () => {
+    if (!selectedFile || !selectedClassId) {
+      setErrorMessage('Please select a file, topic, and class');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      setUploadStatus('idle');
+      setErrorMessage('');
+      
+      const result = await apiService.uploadNote(selectedClassId, selectedFile);
+      
+      setUploadStatus('success');
+      setSuccessMessage(`Successfully uploaded "${selectedFile.name}"`);
+      onUpload(result);
+      
+      // Reset form after successful upload
+      setTimeout(() => {
+        setOpen(false);
+      }, 1500);
+      
+    } catch (error) {
+      setUploadStatus('error');
+      setErrorMessage(error instanceof Error ? error.message : 'Upload failed');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileSelect = (file: File) => {
+    const allowedTypes = [
+      'text/plain',
+      'application/pdf',
+      'image/jpeg',
+      'image/jpg',
+      'image/png'
+    ];
+    
+    if (!allowedTypes.includes(file.type)) {
+      setErrorMessage('Unsupported file type. Please upload .txt, .pdf, .jpg, .jpeg, or .png files.');
+      return;
+    }
+    
+    setSelectedFile(file);
+    setErrorMessage('');
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
     }
   };
 
@@ -104,18 +185,7 @@ export function UploadNoteDialog({ topics, onUpload, trigger }: UploadNoteDialog
     
     const files = e.dataTransfer.files;
     if (files && files[0]) {
-      const file = files[0];
-      if (file.type === 'text/plain') {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const text = e.target?.result as string;
-          setContent(text);
-          if (!title) {
-            setTitle(file.name.replace('.txt', ''));
-          }
-        };
-        reader.readAsText(file);
-      }
+      handleFileSelect(files[0]);
     }
   };
 
@@ -133,9 +203,24 @@ export function UploadNoteDialog({ topics, onUpload, trigger }: UploadNoteDialog
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Error Display */}
+          {errorMessage && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          )}
+          
+          {successMessage && (
+            <Alert>
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>{successMessage}</AlertDescription>
+            </Alert>
+          )}
+
           {/* File Upload Area */}
           <div
-            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
               dragActive 
                 ? 'border-primary bg-primary/5' 
                 : 'border-border hover:border-primary/50'
@@ -144,151 +229,180 @@ export function UploadNoteDialog({ topics, onUpload, trigger }: UploadNoteDialog
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
             onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
           >
             <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground mb-2">
-              Drag and drop your text file here, or paste your notes below
+              {selectedFile ? selectedFile.name : 'Click to select or drag and drop your file here'}
             </p>
             <p className="text-sm text-muted-foreground">
-              Supports .txt files and plain text
+              Supports .txt, .pdf, .jpg, .jpeg, and .png files
             </p>
-          </div>
-
-          {/* Note Title */}
-          <div className="space-y-2">
-            <Label htmlFor="title">Note Title *</Label>
-            <Input
-              id="title"
-              placeholder="e.g., Cell Biology Lecture 3"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-
-          {/* Note Content */}
-          <div className="space-y-2">
-            <Label htmlFor="content">Note Content *</Label>
-            <Textarea
-              id="content"
-              placeholder="Paste or type your lecture notes here..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="min-h-[200px] resize-none"
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,.pdf,.jpg,.jpeg,.png"
+              onChange={handleFileInputChange}
+              className="hidden"
             />
           </div>
 
           {/* Topic Selection */}
-          <div className="space-y-4">
-            <Label>Assign to Topic *</Label>
-            
-            <div className="flex items-center space-x-2">
-              <Button
-                type="button"
-                variant={!createNewTopic ? "default" : "outline"}
-                size="sm"
-                onClick={() => setCreateNewTopic(false)}
-              >
-                Existing Topic
-              </Button>
-              <Button
-                type="button"
-                variant={createNewTopic ? "default" : "outline"}
-                size="sm"
-                onClick={() => setCreateNewTopic(true)}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                New Topic
-              </Button>
-            </div>
-
-            {!createNewTopic ? (
-              <Select value={selectedTopicId} onValueChange={setSelectedTopicId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a topic" />
-                </SelectTrigger>
-                <SelectContent>
-                  {topics.map((topic) => (
-                    <SelectItem key={topic.id} value={topic.id}>
-                      <div className="flex items-center space-x-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: topic.color }}
-                        />
-                        <span>{topic.name}</span>
-                        <Badge variant="outline" className="ml-2">
-                          {topic.subject}
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <div className="space-y-3">
-                <Input
-                  placeholder="Topic name (e.g., Cell Biology)"
-                  value={newTopicName}
-                  onChange={(e) => setNewTopicName(e.target.value)}
-                />
-                <Select value={newTopicSubject} onValueChange={setNewTopicSubject}>
+          {!disableTopicSelection ? (
+            <div className="space-y-2">
+              <Label htmlFor="topic">Topic</Label>
+              <div className="flex items-center space-x-2">
+                <Select
+                  value={selectedTopicId}
+                  onValueChange={setSelectedTopicId}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select subject" />
+                    <SelectValue placeholder="Select a topic" />
                   </SelectTrigger>
                   <SelectContent>
-                    {subjects.map((subject) => (
-                      <SelectItem key={subject} value={subject}>
-                        {subject}
+                    {localTopics.map((topic) => (
+                      <SelectItem key={topic.id} value={topic.id}>
+                        {topic.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowNewTopicInput(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
               </div>
-            )}
-          </div>
-
-          {/* Tags */}
+              
+              {showNewTopicInput && (
+                <div className="flex items-center space-x-2 mt-2">
+                  <Input
+                    placeholder="Enter topic name"
+                    value={newTopicName}
+                    onChange={(e) => setNewTopicName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleCreateTopic();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleCreateTopic}
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowNewTopicInput(false);
+                      setNewTopicName('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>Topic</Label>
+              <div className="p-2 bg-muted rounded-md">
+                {topics.find(t => t.id === preselectedTopicId)?.name || 'Selected Topic'}
+              </div>
+            </div>
+          )}
+          
           <div className="space-y-2">
-            <Label>Tags (Optional)</Label>
-            <div className="flex space-x-2">
-              <Input
-                placeholder="Add a tag"
-                value={currentTag}
-                onChange={(e) => setCurrentTag(e.target.value)}
-                onKeyPress={handleKeyPress}
-              />
-              <Button type="button" variant="outline" size="sm" onClick={handleAddTag}>
-                Add
+            <Label htmlFor="class">Class</Label>
+            <div className="flex items-center space-x-2">
+              <Select
+                value={selectedClassId}
+                onValueChange={setSelectedClassId}
+                disabled={!selectedTopicId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {classes.map((cls) => (
+                    <SelectItem key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowNewClassInput(true)}
+                disabled={!selectedTopicId}
+              >
+                <Plus className="h-4 w-4" />
               </Button>
             </div>
-            {tags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-                    {tag}
-                    <X 
-                      className="h-3 w-3 cursor-pointer" 
-                      onClick={() => handleRemoveTag(tag)}
-                    />
-                  </Badge>
-                ))}
+            
+            {showNewClassInput && (
+              <div className="flex items-center space-x-2 mt-2">
+                <Input
+                  placeholder="Enter class name"
+                  value={newClassName}
+                  onChange={(e) => setNewClassName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleCreateClass();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleCreateClass}
+                >
+                  Add
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowNewClassInput(false);
+                    setNewClassName('');
+                  }}
+                >
+                  Cancel
+                </Button>
               </div>
             )}
           </div>
 
           {/* Submit Button */}
           <div className="flex justify-end space-x-2 pt-4">
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
             <Button 
-              onClick={handleSubmit}
-              disabled={!title.trim() || !content.trim() || 
-                (!createNewTopic && !selectedTopicId) || 
-                (createNewTopic && (!newTopicName.trim() || !newTopicSubject.trim()))
-              }
-              className="bg-accent hover:bg-accent/90 text-accent-foreground"
+              onClick={handleUpload} 
+              disabled={isUploading || !selectedFile || !selectedClassId}
+              className="w-full"
             >
-              Upload Note
+              {isUploading ? (
+                <>
+                  <Upload className="mr-2 h-4 w-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Note
+                </>
+              )}
             </Button>
           </div>
         </div>
