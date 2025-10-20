@@ -1,4 +1,4 @@
-# Study Buddy 🧠📚
+# Study Buddy - HackMIT 2025 Submission
 
 An intelligent study companion with **agentic Active Recall** capabilities that automatically generates personalized study concepts from your lecture materials.
 
